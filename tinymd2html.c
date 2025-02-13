@@ -281,6 +281,29 @@ static void convert_md_headings_to_html(struct file_contents *input, struct file
 	}
 }
 
+static void handle_triple_backquote(struct file_contents *input, struct file_contents *output)
+{
+	int last_line_was_newline = 0;
+	int inside_preformat = 0;
+
+	for (int i = 0; i < input->lines_used; i++) {
+		if (strcmp(input->line[i], "\n") == 0) {
+			last_line_was_newline = 1;
+			add_line_to_file_contents(output, "\n");
+		} else {
+			if (!inside_preformat && last_line_was_newline && strcmp(input->line[i], "```\n") == 0) {
+				inside_preformat = 1;
+				add_line_to_file_contents(output, "<pre>\n");
+			} else if (inside_preformat && strcmp(input->line[i], "```\n") == 0) {
+				inside_preformat = 0;
+				add_line_to_file_contents(output, "</pre>\n");
+			} else {
+				add_line_to_file_contents(output, input->line[i]);
+			}
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
@@ -306,10 +329,12 @@ int main(int argc, char *argv[])
 	escape_html_specials(&input, &output);
 	convert_md_headings_to_html(&output, &input);
 	free_file_contents(&output);
-
-	dump_file_contents(outputfile, &input);
-
+	handle_triple_backquote(&input, &output);
 	free_file_contents(&input);
+
+	dump_file_contents(outputfile, &output);
+	free_file_contents(&output);
+
 
 	fclose(outputfile);
 
