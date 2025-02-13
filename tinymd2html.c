@@ -60,6 +60,18 @@ static void free_file_contents(struct file_contents *c)
 	c->lines_used = 0;
 }
 
+static void trim_trailing_whitespace(char *line)
+{
+	int len = strlen(line);
+
+	for (int i = len; i >= 0; i--) {
+		if (line[i] != ' ' && line[i] != '\t' && line[i] != '\n')
+			break;
+		if (line[i] != '\n')
+			line[i] = '\0';
+	}
+}
+
 static void parse_options(int argc, char *argv[], char **input_filename, char **output_filename)
 {
 	int c;
@@ -145,6 +157,7 @@ static int read_input_file(char *input_filename, struct file_contents *input)
 			fprintf(stderr, "Error reading file %s at line %d\n", input_filename, input->lines_used + 1);
 				break;
 		}
+		trim_trailing_whitespace(buffer);
 		add_line_to_file_contents(input, buffer);
 	} while (1);
 	fclose(inputfile);
