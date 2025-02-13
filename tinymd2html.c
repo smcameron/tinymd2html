@@ -304,6 +304,29 @@ static void handle_triple_backquote(struct file_contents *input, struct file_con
 	}
 }
 
+static void process_paragraphs(struct file_contents *input, struct file_contents *output)
+{
+	free_file_contents(output);
+
+	int paragraph_starting = 0;
+	for (int i = 0; i < input->lines_used; i++) {
+		if (strcmp(input->line[i], "\n") == 0) {
+			paragraph_starting = 1;
+			add_line_to_file_contents(output, "\n");
+			continue;
+		}
+		if (paragraph_starting) {
+			char line[2048];
+			snprintf(line, sizeof(line), "<p>%s", input->line[i]);
+			add_line_to_file_contents(output, line);
+			paragraph_starting = 0;
+		} else {
+			add_line_to_file_contents(output, input->line[i]);
+			paragraph_starting = 0;
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
@@ -331,9 +354,11 @@ int main(int argc, char *argv[])
 	free_file_contents(&output);
 	handle_triple_backquote(&input, &output);
 	free_file_contents(&input);
-
-	dump_file_contents(outputfile, &output);
+	process_paragraphs(&output, &input);
 	free_file_contents(&output);
+
+	dump_file_contents(outputfile, &input);
+	free_file_contents(&input);
 
 
 	fclose(outputfile);
