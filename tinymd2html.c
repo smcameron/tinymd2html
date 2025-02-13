@@ -513,6 +513,29 @@ static void process_paragraphs(struct file_contents *input, struct file_contents
 	}
 }
 
+static void process_boldface(struct file_contents *input, struct file_contents *output)
+{
+	int bold = 0;
+	int p = 0;
+
+	for (int i = 0; i < input->lines_used; i++) {
+		char tmp[2][2048];
+
+		snprintf(tmp[p], 2048, "%s", input->line[i]);
+		do {
+			char *x = strstr(tmp[p], "**");
+			if (!x) {
+				add_line_to_file_contents(output, tmp[p]);
+				break;
+			}
+			p = !p;
+			*x = '\0';
+			sprintf(tmp[p], "%s%s%s", tmp[!p], bold ? "</b>" : "<b>", x + 2);
+			bold = !bold;
+		} while (1);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
@@ -547,6 +570,9 @@ int main(int argc, char *argv[])
 	process_lists(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 	process_paragraphs(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+
+	process_boldface(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
 	dump_file_contents(outputfile, &pingpong[p]);
