@@ -124,11 +124,72 @@ static void dump_file_contents(FILE *f, struct file_contents *input)
 		fprintf(f, "%s", input->line[i]);
 }
 
+static void escape_html_specials_line(char *input_line, char **output_line)
+{
+	/* Calculate how long the output line needs to be. */
+	int input_len = strlen(input_line);
+	int output_len = input_len + 1;
+
+	for (int i = 0; i < input_len; i++) {
+		if (input_line[i] == '<')
+			output_len += 3; /* '<' --> '&lt;' */
+		else if (input_line[i] == '>')
+			output_len += 3; /* '>' --> '&gt;' */
+		else if (input_line[i] == '&')
+			output_len += 4; /* '&' --> '&amp;' */
+	}
+	*output_line = calloc(output_len, 1);
+	int o = 0;
+	for (int i = 0; i < input_len; i++) {
+		if (input_line[i] == '<') {
+			(*output_line)[o] = '&'; o++;
+			(*output_line)[o] = 'l'; o++;
+			(*output_line)[o] = 't'; o++;
+			(*output_line)[o] = ';'; o++;
+		} else if (input_line[i] == '>') {
+			(*output_line)[o] = '&'; o++;
+			(*output_line)[o] = 'g'; o++;
+			(*output_line)[o] = 't'; o++;
+			(*output_line)[o] = ';'; o++;
+		} else if (input_line[i] == '&') {
+			(*output_line)[o] = '&'; o++;
+			(*output_line)[o] = 'a'; o++;
+			(*output_line)[o] = 'm'; o++;
+			(*output_line)[o] = 'p'; o++;
+			(*output_line)[o] = ';'; o++;
+		} else {
+			(*output_line)[o] = input_line[i];
+			o++;
+		}
+	}
+	(*output_line)[o] = '\0';
+}
+
+static void escape_html_specials(struct file_contents *input, struct file_contents *output)
+{
+
+	output->line = calloc(input->lines_used, sizeof(*output->line));
+	if (!output->line) {
+		fprintf(stderr, "Out of memory processing html special chars.\n");
+		exit(1);
+	}
+	output->lines_allocated = input->lines_used;
+	output->lines_used = 0;
+	for (int i = 0; i < input->lines_used; i++) {
+		char *output_line;
+
+		escape_html_specials_line(input->line[i], &output_line);
+		output->line[i] = output_line;
+		output_line = NULL;
+		output->lines_used++;
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
 	FILE *outputfile;
-	struct file_contents input;
+	struct file_contents input, output;
 
 	parse_options(argc, argv, &input_filename, &output_filename);
 	if (output_filename == NULL || strcmp(output_filename, "-") == 0) {
@@ -142,7 +203,10 @@ int main(int argc, char *argv[])
 	}
 
 	read_input_file(input_filename, &input);
-	dump_file_contents(outputfile, &input);
+
+	escape_html_specials(&input, &output);
+
+	dump_file_contents(outputfile, &output);
 
 	fclose(outputfile);
 
