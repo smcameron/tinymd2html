@@ -32,10 +32,32 @@ struct file_contents {
 	int lines_allocated, lines_used;
 };
 
+static void init_file_contents(struct file_contents *c)
+{
+	c->line = NULL;
+	c->lines_allocated = 0;
+	c->lines_used = 0;
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "usage: tinymd2html -i input-file -o output-file\n");
 	exit(1);
+}
+
+static void free_file_contents(struct file_contents *c)
+{
+	if (c->line) {
+		for (int i = 0; i < c->lines_used; i++) {
+			if (c->line[i])
+				free(c->line[i]);
+			c->line[i] = NULL;
+		}
+		free(c->line);
+	}
+	c->line = NULL;
+	c->lines_allocated = 0;
+	c->lines_used = 0;
 }
 
 static void parse_options(int argc, char *argv[], char **input_filename, char **output_filename)
@@ -70,10 +92,33 @@ static void parse_options(int argc, char *argv[], char **input_filename, char **
 	}
 }
 
+static void add_line_to_file_contents(struct file_contents *c, char *line)
+{
+	if (!c->line) {
+		c->line = calloc(1024, sizeof(*c->line));
+		for (int i = 0; i < 1024; i++)
+			c->line[i] = NULL;
+		c->lines_allocated = 1024;
+		c->lines_used = 0;
+	}
+	if (c->lines_used == c->lines_allocated) {
+		char **tmp = realloc(c->line, 2 * c->lines_allocated * sizeof(*c->line));
+		if (!tmp) {
+			fprintf(stderr, "Out of memory\n");
+			exit(1);
+		}
+		c->line = tmp;
+		c->lines_allocated *= 2;
+	}
+	c->line[c->lines_used] = strdup(line);
+	c->lines_used++;
+}
+
 static int read_input_file(char *input_filename, struct file_contents *input)
 {
 	FILE *inputfile;
 
+	free_file_contents(input);
 	input->line = calloc(1024, sizeof(*input->line));
 	for (int i = 0; i < 1024; i++)
 		input->line[i] = NULL;
@@ -100,19 +145,7 @@ static int read_input_file(char *input_filename, struct file_contents *input)
 			fprintf(stderr, "Error reading file %s at line %d\n", input_filename, input->lines_used + 1);
 				break;
 		}
-
-		/* Allocate more lines if need be */
-		if (input->lines_used == input->lines_allocated) {
-			char **tmp = realloc(input->line, 2 * input->lines_allocated * sizeof(*input->line));
-			if (!tmp) {
-				fprintf(stderr, "Out of memory reading input file at line %d\n", input->lines_used + 1);
-				exit(1);
-			}
-			input->line = tmp;
-			input->lines_allocated *= 2;
-		}
-		input->line[input->lines_used] = strdup(buffer);
-		input->lines_used++;
+		add_line_to_file_contents(input, buffer);
 	} while (1);
 	fclose(inputfile);
 	return 0;
@@ -167,7 +200,6 @@ static void escape_html_specials_line(char *input_line, char **output_line)
 
 static void escape_html_specials(struct file_contents *input, struct file_contents *output)
 {
-
 	output->line = calloc(input->lines_used, sizeof(*output->line));
 	if (!output->line) {
 		fprintf(stderr, "Out of memory processing html special chars.\n");
@@ -185,11 +217,65 @@ static void escape_html_specials(struct file_contents *input, struct file_conten
 	}
 }
 
+char *is_md_heading(char *line, int *heading)
+{
+	int i;
+	int len = strlen(line);
+
+	/* Skip leading whitespace */
+	for (i = 0; i < len; i++)
+		if (line[i] != ' ' && line[i] != '\t')
+			break;
+
+	int count = 0;
+	for (; i < len; i++) {
+		if (line[i] == '#')
+			count++;
+		else
+			break;
+	}
+
+	/* Skip more whitespace */
+	for (; i < len; i++)
+		if (line[i] != ' ' && line[i] != '\t')
+			break;
+
+	if (count > 6)
+		*heading = 6;
+	*heading = count;
+	return &line[i];
+}
+
+static void convert_md_headings_to_html(struct file_contents *input, struct file_contents *output)
+{
+	free_file_contents(output);
+	for (int i = 0; i < input->lines_used; i++) {
+		int heading = 0;
+		char *input_heading = is_md_heading(input->line[i], &heading);
+		if (!heading) {
+			add_line_to_file_contents(output, input->line[i]);
+		} else {
+			char line[2048];
+			int len = strlen(input_heading);
+
+			/* Cut off trailing newline, if any. */
+			if (input_heading[len - 1] == '\n')
+				input_heading[len - 1] = '\0';
+
+			snprintf(line, sizeof(line), "<h%d>%s</h%d>\n", heading, input_heading, heading);
+			add_line_to_file_contents(output, line);
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
 	FILE *outputfile;
 	struct file_contents input, output;
+
+	init_file_contents(&input);
+	init_file_contents(&output);
 
 	parse_options(argc, argv, &input_filename, &output_filename);
 	if (output_filename == NULL || strcmp(output_filename, "-") == 0) {
@@ -205,8 +291,12 @@ int main(int argc, char *argv[])
 	read_input_file(input_filename, &input);
 
 	escape_html_specials(&input, &output);
+	convert_md_headings_to_html(&output, &input);
+	free_file_contents(&output);
 
-	dump_file_contents(outputfile, &output);
+	dump_file_contents(outputfile, &input);
+
+	free_file_contents(&input);
 
 	fclose(outputfile);
 
