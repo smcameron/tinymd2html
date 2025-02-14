@@ -39,6 +39,57 @@ static void init_file_contents(struct file_contents *c)
 	c->lines_used = 0;
 }
 
+struct list_stack_element {
+	int ordered;
+	int indenting_level;
+	int indent_spacing;
+	int current_number;
+};
+
+#define MAX_LIST_STACK_DEPTH 100
+static struct list_stack {
+	struct list_stack_element  e[MAX_LIST_STACK_DEPTH];
+	int top;
+} list_stack = { 0 };
+
+static void init_list_stack(struct list_stack *s)
+{
+	memset(s->e, 0, sizeof(s->e));
+	s->top = -1;
+}
+
+static void push_list_stack(struct list_stack *s, int ordered, int indent_spacing)
+{
+	int indent;
+
+	if (s->top >= MAX_LIST_STACK_DEPTH) {
+		fprintf(stderr, "List stack too big.\n");
+		exit(1);
+	}
+
+	if (s->top < 0)
+		indent = 0;
+	else
+		indent = s->e[s->top].indenting_level + 1;
+
+	s->top++;
+	s->e[s->top].indenting_level = indent;
+	s->e[s->top].current_number = 1;
+	s->e[s->top].ordered = ordered;
+	s->e[s->top].indent_spacing = indent_spacing;
+	// printf("push indent = %d, ordered = %d\n", indent_spacing, ordered);
+}
+
+static void pop_list_stack(struct list_stack *s)
+{
+	if (s->top < 0) {
+		fprintf(stderr, "List stack underflow\n");
+		exit(1);
+	}
+	// printf("pop indent = %d, ordered = %d\n", s->e[s->top].indent_spacing, s->e[s->top].ordered);
+	s->top--;
+}
+
 static void usage(void)
 {
 	fprintf(stderr, "usage: tinymd2html -i input-file -o output-file\n");
@@ -304,6 +355,141 @@ static void handle_triple_backquote(struct file_contents *input, struct file_con
 	}
 }
 
+/* Returns 1 if line looks like an list element, and fills
+ * in element position with the column of the element */
+static int looks_like_list_element(char *line, int *element_position, int *ordered)
+{
+	int number;
+
+	/* See if it looks like an ordered list element */
+	int rc = sscanf(line, " %d[.] ", &number);
+	if (rc == 1) {
+		char *x = strchr(line, '.');
+		if (!x)
+			return 0;
+		*element_position = x - line;
+		int len = strlen(line);
+		if (*element_position <= len - 3) {
+			*element_position += 2;
+			*ordered = 1;
+		}
+		// printf("%s looks like a list, element position = %d\n", line, *element_position);
+		return 1;
+	}
+
+	/* See if it looks like an unordered list element */
+	char c[1024];
+	rc = sscanf(line, " %[*-] %*s", c);
+	if (rc == 1) {
+		char *x = strchr(line, c[0]);
+		if (!x)
+			return 0;
+		*element_position = x - line + 2;
+		if ((size_t) *element_position < strlen(line)) {
+			*ordered = 0;
+			// printf("%s looks like a list, element_position = %d\n", line, *element_position);
+			return 1;
+		}
+	}
+	// printf("%s not a list\n", line);
+	return 0;
+}
+
+static void process_lists(struct file_contents *input, struct file_contents *output)
+{
+	int last_line_was_newline = 0;
+	int looks_like_list = 0;
+	int ordered;
+
+	for (int i = 0; i < input->lines_used; i++) {
+		int element_position;
+		if (strcmp (input->line[i], "\n") == 0) {
+			last_line_was_newline = 1;
+			while (list_stack.top >= 0) {
+				add_line_to_file_contents(output,
+					list_stack.e[list_stack.top].ordered ? "</ol>\n" : "</ul>\n");
+				pop_list_stack(&list_stack);
+				if (list_stack.top >= 0) {
+					element_position = list_stack.e[list_stack.top].indent_spacing;
+					ordered = list_stack.e[list_stack.top].ordered;
+				}
+			}
+			add_line_to_file_contents(output, "\n");
+		} else {
+			looks_like_list = looks_like_list_element(input->line[i], &element_position, &ordered);
+			if (last_line_was_newline && looks_like_list) {
+				char line[2048];
+				/* Starting a new list element */
+				add_line_to_file_contents(output, ordered ? "<ol>\n" : "<ul>\n");
+				snprintf(line, sizeof(line), "<li>%s", &input->line[i][element_position]);
+				add_line_to_file_contents(output, line);
+				push_list_stack(&list_stack, ordered, element_position);
+				last_line_was_newline = 0;
+			} else if (looks_like_list) {
+				char line[2048];
+				int elpo = element_position;
+				int indent_spacing;
+
+				if (list_stack.top >= 0)
+					indent_spacing = list_stack.e[list_stack.top].indent_spacing;
+				else
+					indent_spacing = 0;
+
+				while (elpo > indent_spacing) {
+					push_list_stack(&list_stack, ordered, element_position);
+					add_line_to_file_contents(output, ordered ? "<ol>\n" : "<ul>\n");
+					elpo = list_stack.e[list_stack.top].indent_spacing;
+					ordered = list_stack.e[list_stack.top].ordered;
+					if (list_stack.top >= 0)
+						indent_spacing = list_stack.e[list_stack.top].indent_spacing;
+					else
+						indent_spacing = 0;
+				}
+
+				while (elpo < list_stack.e[list_stack.top].indent_spacing) {
+					ordered = list_stack.e[list_stack.top].ordered;
+					add_line_to_file_contents(output, ordered ? "</ol>\n" : "</ul>\n");
+					pop_list_stack(&list_stack);
+				}
+				if (list_stack.top >= 0) {
+					elpo = list_stack.e[list_stack.top].indent_spacing;
+					ordered = list_stack.e[list_stack.top].ordered;
+				}
+				snprintf(line, sizeof(line), "<li>%s", &input->line[i][element_position]);
+				// snprintf(line, sizeof(line), "<li>%s", input->line[i]);
+				add_line_to_file_contents(output, line);
+				last_line_was_newline = 0;
+			} else { /* does not look like a list element */
+				int indent_spacing = 0;
+				int j;
+
+				if (list_stack.top >= 0)
+					indent_spacing = list_stack.e[list_stack.top].indent_spacing;
+				for (j = 0; input->line[i][j] == ' '; )
+					j++;
+
+				if (input->line[i][j] != '\0')
+				while (indent_spacing >	j) {
+					ordered = list_stack.e[list_stack.top].ordered;
+					add_line_to_file_contents(output, ordered ? "</ol>\n" : "</ul>\n");
+					pop_list_stack(&list_stack);
+					if (list_stack.top >= 0) {
+						indent_spacing = list_stack.e[list_stack.top].indent_spacing;
+						ordered = list_stack.e[list_stack.top].ordered;
+					} else {
+						indent_spacing = 0;
+						ordered = 0;
+					}
+					if (list_stack.top == 0)
+						break;
+				}
+				add_line_to_file_contents(output, input->line[i]);
+				last_line_was_newline = 0;
+			}
+		}
+	}
+}
+
 static void process_paragraphs(struct file_contents *input, struct file_contents *output)
 {
 	free_file_contents(output);
@@ -331,10 +517,12 @@ int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
 	FILE *outputfile;
-	struct file_contents input, output;
+	struct file_contents pingpong[2];
+	int p = 0;
 
-	init_file_contents(&input);
-	init_file_contents(&output);
+	init_list_stack(&list_stack);
+	init_file_contents(&pingpong[0]);
+	init_file_contents(&pingpong[1]);
 
 	parse_options(argc, argv, &input_filename, &output_filename);
 	if (output_filename == NULL || strcmp(output_filename, "-") == 0) {
@@ -347,19 +535,22 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	read_input_file(input_filename, &input);
+	read_input_file(input_filename, &pingpong[p]);
 
-	escape_html_specials(&input, &output);
-	convert_md_headings_to_html(&output, &input);
-	free_file_contents(&output);
-	handle_triple_backquote(&input, &output);
-	free_file_contents(&input);
-	process_paragraphs(&output, &input);
-	free_file_contents(&output);
+	escape_html_specials(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+	convert_md_headings_to_html(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+	handle_triple_backquote(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
 
-	dump_file_contents(outputfile, &input);
-	free_file_contents(&input);
+	process_lists(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+	process_paragraphs(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
 
+	dump_file_contents(outputfile, &pingpong[p]);
+	free_file_contents(&pingpong[p]);
 
 	fclose(outputfile);
 
