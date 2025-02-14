@@ -1,0 +1,32 @@
+.TH TINYMD2HTML "1" "FEBRUARY 2025" "tinymd2html" "User Commands"
+.SH NAME
+tinymd2html \- convert a subset of markdown to HTML
+.SH SYNOPSIS
+.B tinymd2html [--input inputfile] [--output outputfile]
+
+.SH DESCRIPTION
+.\" Add any additional description here
+.PP
+tinymd2html converts its input file from markdown to HTML.  It is a hacky program,
+and you probably should not use it.  It handles headings (tagging them with names),
+triple backquotes, paragraphs, lists, boldface, hyperlinks, and blockquotes,
+and nothing else.
+.SH Options:
+.TP
+\fB\-i, --input\fR
+Specify the input file.  If this option is omitted or specified as a dash '-',
+standard input is assumed.
+.TP
+\fB\-o --output\fR
+Specify the input file.  If this option is omitted or specified as a dash '-',
+standard output is assumed.
+.SH EXAMPLE
+.TP
+.B tinymd2html -i input.md -o output.html
+.SH BUGS
+You betcha.  It makes assumptions about input line lengths that may not be true.
+There are probably other known and unknown bugs. Beware. The author only wrote this
+to suit his limited purposes.
+.SH AUTHOR
+Written by Stephen M. Cameron
+.br
