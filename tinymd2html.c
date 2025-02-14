@@ -123,6 +123,13 @@ static void trim_trailing_whitespace(char *line)
 	}
 }
 
+static void trim_trailing_newline(char *line)
+{
+	int len = strlen(line);
+	if (line[len - 1] == '\n')
+		line[len - 1] = '\0';
+}
+
 static void parse_options(int argc, char *argv[], char **input_filename, char **output_filename)
 {
 	int c;
@@ -536,6 +543,58 @@ static void process_boldface(struct file_contents *input, struct file_contents *
 	}
 }
 
+static void process_links(struct file_contents *input, struct file_contents *output)
+{
+	char url[2048];
+	char text[2048];
+
+	for (int i = 0; i < input->lines_used; i++) {
+		char *x = strstr(input->line[i], "](");
+		if (!x) { /* No link present, just copy output */
+			add_line_to_file_contents(output, input->line[i]);
+			continue;
+		}
+		char *begin;
+		for (begin = x; begin > input->line[i]; begin--) {
+			if (*begin == '[')
+				break;
+		}
+		if (begin == input->line[i] && *begin != '[') { /* not a link, just copy */
+			add_line_to_file_contents(output, input->line[i]);
+			continue;
+		}
+		char *end;
+		for (end = x + 1; *end != '\0'; end++) {
+			if (*end == ')') {
+				break;
+			}
+		}
+		if (*end == '\0') { /* not a link */
+			add_line_to_file_contents(output, input->line[i]);
+			continue;
+		}
+		{
+			int j = 0;
+			char *c;
+			for (c = begin + 1; *c != ']'; c++)
+				text[j++] = *c;
+			text[j] = '\0';
+
+			j = 0;
+			for (char *c = x + 2; *c != ')'; c++)
+				url[j++] = *c;
+			url[j] = '\0';
+
+			char line[8192];
+
+			trim_trailing_newline(input->line[i]);
+			*begin = '\0';
+			snprintf(line, sizeof(line), "%s<a href=\"%s\">%s</a>%s\n", input->line[i], url, text, end + 1);
+			add_line_to_file_contents(output, line);
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
@@ -573,6 +632,9 @@ int main(int argc, char *argv[])
 	free_file_contents(&pingpong[p]); p = !p;
 
 	process_boldface(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+
+	process_links(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
 	dump_file_contents(outputfile, &pingpong[p]);
