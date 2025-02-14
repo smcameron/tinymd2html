@@ -28,6 +28,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static int fwf_needed = 0;
+
 struct file_contents {
 	char **line;
 	int lines_allocated, lines_used;
@@ -57,6 +59,20 @@ static void init_list_stack(struct list_stack *s)
 {
 	memset(s->e, 0, sizeof(s->e));
 	s->top = -1;
+}
+
+static void insert_styles(FILE *output)
+{
+
+	if (fwf_needed) {
+		fprintf(output, "<style>\n");
+		if (fwf_needed) {
+			fprintf(output, "fwf {\n"); /* fixed width font */
+			fprintf(output, "	font-family: courier\n");
+			fprintf(output, "}\n");
+		}
+		fprintf(output, "</style>\n");
+	}
 }
 
 static void push_list_stack(struct list_stack *s, int ordered, int indent_spacing)
@@ -578,6 +594,30 @@ static void process_boldface(struct file_contents *input, struct file_contents *
 	}
 }
 
+static void process_single_backquotes(struct file_contents *input, struct file_contents *output)
+{
+	int inside_quotes = 0;
+	int p = 0;
+
+	for (int i = 0; i < input->lines_used; i++) {
+		char tmp[2][2048];
+
+		snprintf(tmp[p], 2048, "%s", input->line[i]);
+		do {
+			char *x = strstr(tmp[p], "`");
+			if (!x) {
+				add_line_to_file_contents(output, tmp[p]);
+				break;
+			}
+			fwf_needed = 1;
+			p = !p;
+			*x = '\0';
+			sprintf(tmp[p], "%s%s%s", tmp[!p], inside_quotes ? "</fwf>" : "<fwf>", x + 1);
+			inside_quotes = !inside_quotes;
+		} while (1);
+	}
+}
+
 static void process_links(struct file_contents *input, struct file_contents *output)
 {
 	char url[2048];
@@ -722,6 +762,9 @@ int main(int argc, char *argv[])
 	process_boldface(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
+	process_single_backquotes(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+
 	process_lists(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
@@ -734,6 +777,7 @@ int main(int argc, char *argv[])
 	process_blockquote(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
+	insert_styles(outputfile);
 	dump_file_contents(outputfile, &pingpong[p]);
 	free_file_contents(&pingpong[p]);
 
