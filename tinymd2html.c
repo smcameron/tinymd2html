@@ -595,6 +595,62 @@ static void process_links(struct file_contents *input, struct file_contents *out
 	}
 }
 
+static int count_blockquote(char *line, char **start)
+{
+	int i;
+	int len = strlen(line);
+
+	int rc = 0;
+	i = 0;
+	if (strncmp("<p>", line, 3) == 0)
+		i = 3;
+	for (; i < len; i += 4) {
+		if (strncmp("&gt;", &line[i], 4) == 0)
+			rc++;
+		else
+			break;
+	}
+	*start = &line[i];
+	return rc;
+}
+
+static void process_blockquote(struct file_contents *input, struct file_contents *output)
+{
+	static int blockquote_level = 0;
+	char *start = NULL;
+
+	// printf("blockquote = %d\n", blockquote_level);
+	for (int i = 0; i < input->lines_used; i++) {
+		// printf("input = '%s'\n", input->line[i]);
+		if (strcmp(input->line[i], "\n") == 0) {
+			for (; blockquote_level > 0; blockquote_level--)
+				add_line_to_file_contents(output, "</blockquote>\n");
+			add_line_to_file_contents(output, "\n");
+			continue;
+		}
+		int bql = count_blockquote(input->line[i], &start);
+		// printf("bql = %d, blockquote = %d\n", bql, blockquote_level);
+		if (bql != blockquote_level) {
+			if (bql > blockquote_level) {
+				// printf("up bql = %d, bq = %d %s\n", bql, blockquote_level, input->line[i]);
+				for (; blockquote_level < bql; blockquote_level++) {
+					add_line_to_file_contents(output, "<blockquote>\n");
+				}
+				// printf("blockquote = %d\n", blockquote_level);
+			} else {
+				// printf("down bql = %d, bq = %d %s\n", bql, blockquote_level, input->line[i]);
+				for (; bql < blockquote_level; blockquote_level--) {
+					add_line_to_file_contents(output, "</blockquote>\n");
+				}
+				// printf("blockquote = %d\n", blockquote_level);
+			}
+		}
+		if (bql == 0)
+			start = input->line[i];
+		add_line_to_file_contents(output, start);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	char *input_filename, *output_filename;
@@ -635,6 +691,9 @@ int main(int argc, char *argv[])
 	free_file_contents(&pingpong[p]); p = !p;
 
 	process_links(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+
+	process_blockquote(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
 	dump_file_contents(outputfile, &pingpong[p]);
