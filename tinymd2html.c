@@ -20,6 +20,7 @@
 */
 
 
+#include <ctype.h>
 #include <errno.h>
 #include <getopt.h>
 #include <stdio.h>
@@ -317,6 +318,35 @@ char *is_md_heading(char *line, int *heading)
 	return &line[i];
 }
 
+static void format_nametag(char *nametag)
+{
+	int i, j;
+
+	i = 0; j = 0;
+	while (1) {
+		if (nametag[j] == '\0') {
+			nametag[i] = '\0';
+			break;
+		}
+		if (nametag[j] >= 'A' && nametag[j] <= 'Z') {
+			nametag[i] = tolower(nametag[j]);
+			i++; j++;
+			continue;
+		}
+		if (nametag[j] == ' ' || nametag[j] == '\t') {
+			j++;
+			continue;
+		}
+		if ((nametag[j] >= 'a' && nametag[j] <= 'z') ||
+			(nametag[j] >= '0' && nametag[j] <= '9')) {
+			nametag[i] = nametag[j];
+			i++; j++;
+			continue;
+		}
+		j++;
+	}
+}
+
 static void convert_md_headings_to_html(struct file_contents *input, struct file_contents *output)
 {
 	free_file_contents(output);
@@ -326,14 +356,19 @@ static void convert_md_headings_to_html(struct file_contents *input, struct file
 		if (!heading) {
 			add_line_to_file_contents(output, input->line[i]);
 		} else {
-			char line[2048];
+			char line[4096];
 			int len = strlen(input_heading);
+			char *nametag = strdup(input_heading);
+
+			format_nametag(nametag);
 
 			/* Cut off trailing newline, if any. */
 			if (input_heading[len - 1] == '\n')
 				input_heading[len - 1] = '\0';
 
-			snprintf(line, sizeof(line), "<h%d>%s</h%d>\n", heading, input_heading, heading);
+			snprintf(line, sizeof(line), "<a name=\"%s\"><h%d>%s</h%d></a>\n",
+				nametag, heading, input_heading, heading);
+			free(nametag);
 			add_line_to_file_contents(output, line);
 		}
 	}
