@@ -712,17 +712,20 @@ int main(int argc, char *argv[])
 
 	escape_html_specials(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
+
 	convert_md_headings_to_html(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
+
 	handle_triple_backquote(&pingpong[p], &pingpong[!p]);
+	free_file_contents(&pingpong[p]); p = !p;
+
+	process_boldface(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
 	process_lists(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
-	process_paragraphs(&pingpong[p], &pingpong[!p]);
-	free_file_contents(&pingpong[p]); p = !p;
 
-	process_boldface(&pingpong[p], &pingpong[!p]);
+	process_paragraphs(&pingpong[p], &pingpong[!p]);
 	free_file_contents(&pingpong[p]); p = !p;
 
 	process_links(&pingpong[p], &pingpong[!p]);
