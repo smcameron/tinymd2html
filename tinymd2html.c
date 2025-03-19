@@ -622,6 +622,7 @@ static void process_links(struct file_contents *input, struct file_contents *out
 {
 	char url[2048];
 	char text[2048];
+	int is_image = 0;
 
 	for (int i = 0; i < input->lines_used; i++) {
 		char *x = strstr(input->line[i], "](");
@@ -633,6 +634,10 @@ static void process_links(struct file_contents *input, struct file_contents *out
 		for (begin = x; begin > input->line[i]; begin--) {
 			if (*begin == '[')
 				break;
+		}
+		if (begin > input->line[i] && *(begin - 1) == '!') {
+			is_image = 1;
+			*(begin - 1) = ' ';
 		}
 		if (begin == input->line[i] && *begin != '[') { /* not a link, just copy */
 			add_line_to_file_contents(output, input->line[i]);
@@ -664,7 +669,12 @@ static void process_links(struct file_contents *input, struct file_contents *out
 
 			trim_trailing_newline(input->line[i]);
 			*begin = '\0';
-			snprintf(line, sizeof(line), "%s<a href=\"%s\">%s</a>%s\n", input->line[i], url, text, end + 1);
+			if (is_image)
+				snprintf(line, sizeof(line), "%s<img src=\"%s\" alt=\"%s\">%s\n",
+					input->line[i], url, text, end + 1);
+			else
+				snprintf(line, sizeof(line), "%s<a href=\"%s\">%s</a>%s\n",
+					input->line[i], url, text, end + 1);
 			add_line_to_file_contents(output, line);
 		}
 	}
