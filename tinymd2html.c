@@ -630,6 +630,7 @@ static void process_links(struct file_contents *input, struct file_contents *out
 		snprintf(current_input_line, sizeof(current_input_line), "%s", input->line[i]);
 		char *x;
 check_if_more_links:
+		is_image = 0;
 		x = strstr(current_input_line, "](");
 		if (!x) { /* No link present, just copy output */
 			add_line_to_file_contents(output, current_input_line);
