@@ -330,7 +330,8 @@ char *is_md_heading(char *line, int *heading)
 
 	if (count > 6)
 		*heading = 6;
-	*heading = count;
+	else
+		*heading = count;
 	return &line[i];
 }
 
