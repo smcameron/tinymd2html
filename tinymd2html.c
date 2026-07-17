@@ -589,7 +589,7 @@ static void process_boldface(struct file_contents *input, struct file_contents *
 			}
 			p = !p;
 			*x = '\0';
-			sprintf(tmp[p], "%s%s%s", tmp[!p], bold ? "</b>" : "<b>", x + 2);
+			snprintf(tmp[p], sizeof(tmp[p]), "%s%s%s", tmp[!p], bold ? "</b>" : "<b>", x + 2);
 			bold = !bold;
 		} while (1);
 	}
@@ -603,7 +603,7 @@ static void process_single_backquotes(struct file_contents *input, struct file_c
 	for (int i = 0; i < input->lines_used; i++) {
 		char tmp[2][2048];
 
-		snprintf(tmp[p], 2048, "%s", input->line[i]);
+		snprintf(tmp[p], sizeof(tmp[p]), "%s", input->line[i]);
 		do {
 			char *x = strstr(tmp[p], "`");
 			if (!x) {
@@ -613,7 +613,7 @@ static void process_single_backquotes(struct file_contents *input, struct file_c
 			fwf_needed = 1;
 			p = !p;
 			*x = '\0';
-			sprintf(tmp[p], "%s%s%s", tmp[!p], inside_quotes ? "</fwf>" : "<fwf>", x + 1);
+			snprintf(tmp[p], sizeof(tmp[p]), "%s%s%s", tmp[!p], inside_quotes ? "</fwf>" : "<fwf>", x + 1);
 			inside_quotes = !inside_quotes;
 		} while (1);
 	}
