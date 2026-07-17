@@ -661,13 +661,25 @@ check_if_more_links:
 		{
 			int j = 0;
 			char *c;
-			for (c = begin + 1; *c != ']'; c++)
+			for (c = begin + 1; *c != ']'; c++) {
 				text[j++] = *c;
+				if (j >= (int) sizeof(text)) {
+					fprintf(stderr, "line %d: text associated with URL truncated\n", i);
+					j = sizeof(text) - 1;
+					break;
+				}
+			}
 			text[j] = '\0';
 
 			j = 0;
-			for (char *c = x + 2; *c != ')'; c++)
+			for (char *c = x + 2; *c != ')'; c++) {
 				url[j++] = *c;
+				if (j >= (int) sizeof(url)) {
+					fprintf(stderr, "line %d: URL truncated\n", i);
+					j = sizeof(url) - 1;
+					break;
+				}
+			}
 			url[j] = '\0';
 
 			char line[8192];
