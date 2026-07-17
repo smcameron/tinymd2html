@@ -624,24 +624,28 @@ static void process_links(struct file_contents *input, struct file_contents *out
 	char url[2048];
 	char text[2048];
 	int is_image = 0;
+	char current_input_line[8192];
 
 	for (int i = 0; i < input->lines_used; i++) {
-		char *x = strstr(input->line[i], "](");
+		snprintf(current_input_line, sizeof(current_input_line), "%s", input->line[i]);
+		char *x;
+check_if_more_links:
+		x = strstr(current_input_line, "](");
 		if (!x) { /* No link present, just copy output */
-			add_line_to_file_contents(output, input->line[i]);
+			add_line_to_file_contents(output, current_input_line);
 			continue;
 		}
 		char *begin;
-		for (begin = x; begin > input->line[i]; begin--) {
+		for (begin = x; begin > current_input_line; begin--) {
 			if (*begin == '[')
 				break;
 		}
-		if (begin > input->line[i] && *(begin - 1) == '!') {
+		if (begin > current_input_line && *(begin - 1) == '!') {
 			is_image = 1;
 			*(begin - 1) = ' ';
 		}
-		if (begin == input->line[i] && *begin != '[') { /* not a link, just copy */
-			add_line_to_file_contents(output, input->line[i]);
+		if (begin == current_input_line && *begin != '[') { /* not a link, just copy */
+			add_line_to_file_contents(output, current_input_line);
 			continue;
 		}
 		char *end;
@@ -651,7 +655,7 @@ static void process_links(struct file_contents *input, struct file_contents *out
 			}
 		}
 		if (*end == '\0') { /* not a link */
-			add_line_to_file_contents(output, input->line[i]);
+			add_line_to_file_contents(output, current_input_line);
 			continue;
 		}
 		{
@@ -668,15 +672,16 @@ static void process_links(struct file_contents *input, struct file_contents *out
 
 			char line[8192];
 
-			trim_trailing_newline(input->line[i]);
+			trim_trailing_newline(current_input_line);
 			*begin = '\0';
 			if (is_image)
 				snprintf(line, sizeof(line), "%s<img src=\"%s\" alt=\"%s\">%s\n",
-					input->line[i], url, text, end + 1);
+					current_input_line, url, text, end + 1);
 			else
 				snprintf(line, sizeof(line), "%s<a href=\"%s\">%s</a>%s\n",
-					input->line[i], url, text, end + 1);
-			add_line_to_file_contents(output, line);
+					current_input_line, url, text, end + 1);
+			snprintf(current_input_line, sizeof(current_input_line), "%s", line);
+			goto check_if_more_links;
 		}
 	}
 }
