@@ -438,7 +438,7 @@ static int looks_like_list_element(char *line, int *element_position, int *order
 
 	/* See if it looks like an unordered list element */
 	char c[1024];
-	rc = sscanf(line, " %1024[*-] %*s", c);
+	rc = sscanf(line, " %1023[*-] %*s", c);
 	if (rc == 1) {
 		char *x = strchr(line, c[0]);
 		if (!x)
